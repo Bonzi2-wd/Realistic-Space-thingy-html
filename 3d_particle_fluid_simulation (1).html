@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Fidelity 3D Screen-Space Fluid Simulation</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #02040a;
+            overflow: hidden;
+        }
+        h1, h2, h3, button, span {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        /* Custom sleek scrollbar for control panels */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(6, 182, 212, 0.3);
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(6, 182, 212, 0.6);
+        }
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: rgba(8, 12, 24, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+        .glow-active {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
+            border-color: rgba(6, 182, 212, 0.6) !important;
+        }
+    </style>
+</head>
+<body class="text-gray-100 select-none">
+
+    <!-- Primary Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0 w-full h-full"></div>
+
+    <!-- Main Navigation Bar -->
+    <header class="absolute top-0 left-0 right-0 z-10 flex justify-between items-center px-6 py-4 pointer-events-none">
+        <div class="flex items-center gap-3 pointer-events-auto bg-slate-950/70 backdrop-blur-md border border-white/10 px-4 py-2.5 rounded-2xl">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                <i class="fa-solid fa-flask-vial text-white text-lg animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-md tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-white via-cyan-200 to-blue-400">HydroFlow PRO</h1>
+                <p class="text-[9px] text-cyan-400 font-bold tracking-widest uppercase">Screen-Space Fluid Surface Solver</p>
+            </div>
+        </div>
+        
+        <!-- Live Perf Overlay -->
+        <div class="pointer-events-auto flex gap-4 bg-slate-950/70 backdrop-blur-md border border-white/10 px-4 py-2.5 rounded-2xl text-xs">
+            <div class="flex flex-col items-center border-r border-white/10 pr-3">
+                <span class="text-[9px] text-gray-400 uppercase font-semibold">FPS</span>
+                <span id="fps-counter" class="text-emerald-400 font-bold text-sm">--</span>
+            </div>
+            <div class="flex flex-col items-center border-r border-white/10 pr-3">
+                <span class="text-[9px] text-gray-400 uppercase font-semibold">Fluid State</span>
+                <span id="particle-counter" class="text-cyan-400 font-bold text-sm">--</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <span class="text-[9px] text-gray-400 uppercase font-semibold">Render Mode</span>
+                <span id="current-render-mode" class="text-purple-400 font-bold text-sm">Screen-Space Liquid</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Side Control Panel -->
+    <aside id="control-panel" class="absolute top-24 left-6 z-10 w-96 max-h-[82vh] overflow-y-auto rounded-3xl glass-panel p-6 shadow-2xl transition-all duration-300 pointer-events-auto">
+        <div class="flex items-center justify-between mb-5 border-b border-white/10 pb-4">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-cyan-400"></i>
+                <h2 class="text-lg font-bold tracking-wide">Fluid Dynamics Studio</h2>
+            </div>
+            <button id="toggle-panel-btn" class="text-gray-400 hover:text-white transition-colors" title="Collapse Panel">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+        </div>
+
+        <!-- Render Style Toggles -->
+        <div class="mb-6">
+            <label class="block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">Rendering Mode</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="setRenderMode('fluid')" id="btn-render-fluid" class="render-btn px-3 py-2.5 bg-cyan-950/50 text-cyan-300 border border-cyan-500/50 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2 glow-active">
+                    <i class="fa-solid fa-droplet"></i> Fluid Surface
+                </button>
+                <button onclick="setRenderMode('particles')" id="btn-render-particles" class="render-btn px-3 py-2.5 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-braille"></i> 3D Particles
+                </button>
+            </div>
+        </div>
+
+        <!-- Presets -->
+        <div class="mb-6">
+            <label class="block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">Material Realism Presets</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="applyPreset('water')" class="preset-btn px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/80 rounded-xl text-xs transition duration-200 border border-white/5 hover:border-cyan-500/50 flex items-center justify-start gap-2">
+                    <i class="fa-solid fa-glass-water text-cyan-400"></i> Clear Water
+                </button>
+                <button onclick="applyPreset('mercury')" class="preset-btn px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/80 rounded-xl text-xs transition duration-200 border border-white/5 hover:border-slate-400/50 flex items-center justify-start gap-2">
+                    <i class="fa-solid fa-circle-nodes text-slate-300"></i> Liquid Mercury
+                </button>
+                <button onclick="applyPreset('honey')" class="preset-btn px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/80 rounded-xl text-xs transition duration-200 border border-white/5 hover:border-amber-500/50 flex items-center justify-start gap-2">
+                    <i class="fa-solid fa-spoon text-amber-500"></i> Viscous Honey
+                </button>
+                <button onclick="applyPreset('slime')" class="preset-btn px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/80 rounded-xl text-xs transition duration-200 border border-white/5 hover:border-green-500/50 flex items-center justify-start gap-2">
+                    <i class="fa-solid fa-biohazard text-green-400"></i> Toxic Acid
+                </button>
+                <button onclick="applyPreset('blood')" class="preset-btn col-span-2 px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/80 rounded-xl text-xs transition duration-200 border border-white/5 hover:border-rose-600/50 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-droplet text-rose-500 animate-pulse"></i> Deep Viscous Blood
+                </button>
+            </div>
+        </div>
+
+        <!-- SPH Physics Engine Tuning -->
+        <div class="space-y-4 mb-6">
+            <h3 class="text-xs font-semibold uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2">Solver Engine Tuning (Full SPH)</h3>
+            
+            <!-- Gravity -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">System Gravity</label>
+                    <span id="gravity-val" class="text-xs text-cyan-400 font-mono">-9.81</span>
+                </div>
+                <input type="range" id="gravity-slider" min="-25" max="0" step="0.5" value="-9.8" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Viscosity -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Fluid Viscosity (Internal Friction)</label>
+                    <span id="viscosity-val" class="text-xs text-cyan-400 font-mono">0.15</span>
+                </div>
+                <input type="range" id="viscosity-slider" min="0.01" max="1.8" step="0.01" value="0.15" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Cohesion / Surface Tension -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Surface Cohesion (Droplet Cohesion)</label>
+                    <span id="tension-val" class="text-xs text-cyan-400 font-mono">0.15</span>
+                </div>
+                <input type="range" id="tension-slider" min="0.0" max="0.8" step="0.02" value="0.15" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Gas Stiffness -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Fluid Stiffness (Incompressibility)</label>
+                    <span id="stiffness-val" class="text-xs text-cyan-400 font-mono">25.0</span>
+                </div>
+                <input type="range" id="stiffness-slider" min="5" max="90" step="1" value="25.0" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Rest Density -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Target Rest Density</label>
+                    <span id="rest-density-val" class="text-xs text-cyan-400 font-mono">1.0</span>
+                </div>
+                <input type="range" id="rest-density-slider" min="0.1" max="4.0" step="0.1" value="1.0" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+        </div>
+
+        <!-- Render Realism Controllers -->
+        <div class="space-y-4 mb-6">
+            <h3 class="text-xs font-semibold uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2">Visual Realism & Shading</h3>
+            
+            <!-- Refraction Strength -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Refraction Strength (Warping)</label>
+                    <span id="refraction-val" class="text-xs text-cyan-400 font-mono">0.05</span>
+                </div>
+                <input type="range" id="refraction-slider" min="0.0" max="0.15" step="0.005" value="0.05" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Fresnel Strength -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Fresnel Reflection Power</label>
+                    <span id="fresnel-val" class="text-xs text-cyan-400 font-mono">0.80</span>
+                </div>
+                <input type="range" id="fresnel-slider" min="0.0" max="1.5" step="0.05" value="0.80" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Metaball Blend Threshold -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Surface Threshold (Liquid Merge)</label>
+                    <span id="threshold-val" class="text-xs text-cyan-400 font-mono">0.30</span>
+                </div>
+                <input type="range" id="threshold-slider" min="0.1" max="0.75" step="0.01" value="0.30" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+
+            <!-- Particle Render Size -->
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="text-xs text-gray-300">Particle Radius Scale</label>
+                    <span id="p-scale-val" class="text-xs text-cyan-400 font-mono">1.0</span>
+                </div>
+                <input type="range" id="p-scale-slider" min="0.4" max="1.8" step="0.05" value="1.0" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+        </div>
+
+        <!-- Mouse Interaction Mode -->
+        <div class="mb-6">
+            <h3 class="text-xs font-semibold uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2 mb-3">Viewport Force Field</h3>
+            <div class="grid grid-cols-2 gap-2" id="interaction-modes">
+                <button onclick="setInteractionMode('attract')" id="btn-attract" class="mode-btn px-3 py-2 bg-cyan-950/40 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-compress-arrows-alt"></i> Gravity Well
+                </button>
+                <button onclick="setInteractionMode('repel')" id="btn-repel" class="mode-btn px-3 py-2 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-expand-arrows-alt"></i> Repulsion
+                </button>
+                <button onclick="setInteractionMode('vortex')" id="btn-vortex" class="mode-btn px-3 py-2 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-hurricane"></i> Vortex Spin
+                </button>
+                <button onclick="setInteractionMode('none')" id="btn-none" class="mode-btn px-3 py-2 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-ban"></i> Camera Only
+                </button>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-2 text-center"><i class="fa-solid fa-info-circle mr-1 text-cyan-500"></i> Click/Hold & Drag on the container to manipulate liquid!</p>
+        </div>
+
+        <!-- Simulation Actions -->
+        <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+            <button onclick="resetSimulation()" class="px-4 py-3 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate-left"></i> Reset Fluid
+            </button>
+            <button onclick="addParticlesBatch()" class="px-4 py-3 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-plus"></i> Add Liquid
+            </button>
+        </div>
+    </aside>
+
+    <!-- Minimized Studio Trigger -->
+    <button id="expand-panel-btn" class="absolute top-24 left-6 z-10 hidden items-center gap-2 px-4 py-3 rounded-2xl glass-panel text-white hover:text-cyan-400 transition-all duration-300 pointer-events-auto border border-white/10 shadow-lg">
+        <i class="fa-solid fa-sliders text-cyan-400"></i>
+        <span class="text-xs font-bold uppercase tracking-wider">Open Control Studio</span>
+    </button>
+
+    <!-- Quick Actions Panel (Right Side) -->
+    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 flex gap-4 bg-slate-950/85 backdrop-blur-md border border-white/10 px-5 py-3 rounded-3xl pointer-events-auto shadow-2xl items-center">
+        <button id="play-pause-btn" onclick="togglePause()" class="w-11 h-11 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center transition-all shadow-lg hover:scale-105" title="Pause/Play Simulation">
+            <i class="fa-solid fa-pause text-sm" id="play-pause-icon"></i>
+        </button>
+        <button id="step-btn" onclick="stepSimulation()" class="w-10 h-10 rounded-full bg-slate-900 hover:bg-slate-850 text-gray-300 flex items-center justify-center border border-white/5 transition" title="Single Frame Step">
+            <i class="fa-solid fa-forward-step text-sm"></i>
+        </button>
+        <div class="h-6 w-px bg-white/10"></div>
+        <button onclick="setGravityOrientation('down')" class="w-9 h-9 rounded-xl bg-slate-900 hover:bg-slate-850 text-gray-300 flex items-center justify-center border border-white/5 transition text-xs" title="Force Gravity Downward">
+            <i class="fa-solid fa-arrow-down"></i>
+        </button>
+        <button onclick="setGravityOrientation('zero')" class="w-9 h-9 rounded-xl bg-slate-900 hover:bg-slate-850 text-gray-300 flex items-center justify-center border border-white/5 transition text-xs" title="Set Zero Gravity">
+            <i class="fa-solid fa-circle-dot"></i>
+        </button>
+        <button onclick="triggerExplosion()" class="w-9 h-9 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 flex items-center justify-center border border-rose-500/20 transition text-xs" title="Force Explode">
+            <i class="fa-solid fa-bomb"></i>
+        </button>
+    </div>
+
+    <!-- Quick Interaction Tooltip -->
+    <div class="absolute bottom-6 right-6 z-10 glass-panel border border-white/10 rounded-2xl px-4 py-3 max-w-xs text-[11px] text-gray-400 leading-relaxed pointer-events-none">
+        <div class="font-bold text-gray-200 mb-1 flex items-center gap-1">
+            <i class="fa-solid fa-gamepad text-cyan-400"></i> CONTROLS & NAVIGATION:
+        </div>
+        <div><strong class="text-cyan-400">Left Click + Drag:</strong> Manipulate Fluid (if active)</div>
+        <div><strong class="text-cyan-400">Right Click + Drag:</strong> Rotate Orbit Camera</div>
+        <div><strong class="text-cyan-400">Scroll:</strong> Zoom Viewport in/out</div>
+    </div>
+
+    <!-- Script Imports -->
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Orbit Controls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Core WebGL / Interactive Global Variables
+        let mainScene, fluidScene, camera, renderer, controls;
+        let backgroundRenderTarget, fluidRenderTarget;
+        let compositeQuad;
+        
+        // Background and Glass Tank references
+        let glassContainer, innerGridFloor, calibrationShapes = [];
+        let particlePoints, particleMesh;
+
+        // Visual Floor Reaction (Splash Mist Particles) State
+        const MAX_SPLASH = 400;
+        const splashPos = new Float32Array(MAX_SPLASH * 3);
+        const splashVel = new Float32Array(MAX_SPLASH * 3);
+        const splashLife = new Float32Array(MAX_SPLASH);
+        let splashIndex = 0;
+        let splashPoints;
+
+        // Stats tracking
+        let lastTime = 0;
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+        let isPaused = false;
+        let stepOnce = false;
+
+        // Bounding Dimensions
+        const BOUNDS = {
+            minX: -8.0, maxX: 8.0,
+            minY: -8.0, maxY: 8.0,
+            minZ: -8.0, maxZ: 8.0
+        };
+
+        // Real SPH Physics Parameters
+        const CONFIG = {
+            gravity: new THREE.Vector3(0, -9.81, 0),
+            viscosity: 0.15,
+            surfaceTension: 0.15, // Classical cohesion multiplier
+            stiffness: 25.0,
+            restDensity: 1.0,
+            smoothingLength: 1.15,
+            particleMass: 0.22,
+            particleScale: 1.0,
+            maxParticles: 3500,
+            renderMode: 'fluid', // 'fluid' or 'particles'
+            
+            // Visual Config
+            refractionStrength: 0.05,
+            fresnelStrength: 0.8,
+            threshold: 0.3,
+            metalness: 0.0, // 0.0 = Water/translucent, 1.0 = Mercury
+            baseColor: new THREE.Color(0.2, 0.6, 1.0),
+            deepColor: new THREE.Color(0.0, 0.2, 0.6),
+            specularPower: 48.0
+        };
+
+        // Arrays representing state details
+        const MAX_CAPACITY = CONFIG.maxParticles;
+        let particleCount = 1800;
+
+        const pos = new Float32Array(MAX_CAPACITY * 3);
+        const vel = new Float32Array(MAX_CAPACITY * 3);
+        const forces = new Float32Array(MAX_CAPACITY * 3);
+        const density = new Float32Array(MAX_CAPACITY);
+        const pressure = new Float32Array(MAX_CAPACITY);
+
+        // Spatial hashing optimization for Fast O(N) SPH Calculations
+        const SPATIAL_GRID = {
+            cellSize: CONFIG.smoothingLength,
+            buckets: new Map(),
+            clear: function() { this.buckets.clear(); },
+            hash: function(x, y, z) {
+                const ix = Math.floor(x / this.cellSize);
+                const iy = Math.floor(y / this.cellSize);
+                const iz = Math.floor(z / this.cellSize);
+                return `${ix},${iy},${iz}`;
+            },
+            populate: function() {
+                this.clear();
+                this.cellSize = CONFIG.smoothingLength;
+                for (let i = 0; i < particleCount; i++) {
+                    const idx = i * 3;
+                    const key = this.hash(pos[idx], pos[idx+1], pos[idx+2]);
+                    if (!this.buckets.has(key)) {
+                        this.buckets.set(key, []);
+                    }
+                    this.buckets.get(key).push(i);
+                }
+            },
+            getNearby: function(x, y, z) {
+                const neighbors = [];
+                const ix = Math.floor(x / this.cellSize);
+                const iy = Math.floor(y / this.cellSize);
+                const iz = Math.floor(z / this.cellSize);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dz = -1; dz <= 1; dz++) {
+                            const key = `${ix + dx},${iy + dy},${iz + dz}`;
+                            const bucket = this.buckets.get(key);
+                            if (bucket) neighbors.push(...bucket);
+                        }
+                    }
+                }
+                return neighbors;
+            }
+        };
+
+        // Color Maps matching Material Presets for direct Particle rendering
+        const PALETTES = {
+            cyberpunk: { base: new THREE.Color(0.05, 0.45, 0.75), high: new THREE.Color(0.95, 0.05, 0.55) },
+            water: { base: new THREE.Color(0.2, 0.6, 1.0), high: new THREE.Color(0.0, 0.2, 0.6) },
+            mercury: { base: new THREE.Color(0.7, 0.75, 0.8), high: new THREE.Color(0.95, 0.95, 0.95) },
+            honey: { base: new THREE.Color(1.0, 0.6, 0.0), high: new THREE.Color(0.25, 0.1, 0.0) },
+            slime: { base: new THREE.Color(0.1, 0.7, 0.1), high: new THREE.Color(0.02, 0.3, 0.05) },
+            blood: { base: new THREE.Color(0.6, 0.05, 0.05), high: new THREE.Color(0.3, 0.0, 0.02) }
+        };
+
+        // Interactions Tracker
+        let interactionMode = 'attract';
+        const mouseRaycaster = new THREE.Raycaster();
+        const mouse2D = new THREE.Vector2();
+        let mouse3D = new THREE.Vector3(0, 0, 0);
+        let isMouseDown = false;
+        let interactionMeshPlane;
+
+        // Preset library definitions
+        const MATERIAL_PRESETS = {
+            water: {
+                viscosity: 0.12, tension: 0.15, stiffness: 25.0, restDensity: 1.0,
+                pScale: 0.9, refraction: 0.05, fresnel: 0.8, threshold: 0.32,
+                metalness: 0.0, baseCol: '#3ba3ff', deepCol: '#002663', specPower: 64.0, palette: 'water'
+            },
+            mercury: {
+                viscosity: 0.35, tension: 0.35, stiffness: 45.0, restDensity: 1.5,
+                pScale: 1.05, refraction: 0.0, fresnel: 1.3, threshold: 0.38,
+                metalness: 1.0, baseCol: '#c4ced4', deepCol: '#ffffff', specPower: 128.0, palette: 'mercury'
+            },
+            honey: {
+                viscosity: 1.3, tension: 0.60, stiffness: 18.0, restDensity: 1.3,
+                pScale: 1.15, refraction: 0.08, fresnel: 0.7, threshold: 0.28,
+                metalness: 0.0, baseCol: '#ffa100', deepCol: '#401800', specPower: 32.0, palette: 'honey'
+            },
+            slime: {
+                viscosity: 0.45, tension: 0.25, stiffness: 35.0, restDensity: 1.1,
+                pScale: 1.0, refraction: 0.06, fresnel: 0.9, threshold: 0.3,
+                metalness: 0.0, baseCol: '#10b981', deepCol: '#064e3b', specPower: 48.0, palette: 'slime'
+            },
+            blood: {
+                viscosity: 0.25, tension: 0.18, stiffness: 30.0, restDensity: 1.15,
+                pScale: 1.0, refraction: 0.03, fresnel: 1.0, threshold: 0.34,
+                metalness: 0.0, baseCol: '#991b1b', deepCol: '#4c0519', specPower: 56.0, palette: 'blood'
+            }
+        };
+
+        window.onload = function() {
+            initThree();
+            initSimulationState();
+            setupEventListeners();
+            animate(0);
+        };
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            
+            // 1. Two separate scene setups
+            mainScene = new THREE.Scene(); // Holds background and glass environment
+            mainScene.fog = new THREE.FogExp2(0x02040a, 0.012);
+
+            fluidScene = new THREE.Scene(); // Private render pass scene for fluid particles
+
+            // 2. Camera setup
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 10, 24);
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.setClearColor(mainScene.fog.color);
+            container.appendChild(renderer.domElement);
+
+            // 4. Camera Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.15;
+            controls.minDistance = 6;
+            controls.maxDistance = 45;
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.NONE, // Left click is particle interaction force
+                MIDDLE: THREE.MOUSE.DOLLY,
+                RIGHT: THREE.MOUSE.ROTATE
+            };
+
+            // 5. Environmental Lighting (Background Main Scene)
+            const ambient = new THREE.AmbientLight(0x0e111a, 1.5);
+            mainScene.add(ambient);
+
+            const spotlight = new THREE.DirectionalLight(0xffffff, 2.5);
+            spotlight.position.set(10, 20, 10);
+            spotlight.castShadow = true;
+            spotlight.shadow.mapSize.width = 1024;
+            spotlight.shadow.mapSize.height = 1024;
+            spotlight.shadow.bias = -0.001;
+            mainScene.add(spotlight);
+
+            const rimLight = new THREE.DirectionalLight(0x06b6d4, 1.5);
+            rimLight.position.set(-10, -5, -10);
+            mainScene.add(rimLight);
+
+            // 6. BUILD HIGH-CONTRAST STUDIO ENVIRONMENT (FOR REFRACTION TEST GRAPHICS)
+            buildCalibrationBackground();
+
+            // 7. BUILD GLASS DECK AND CONTAINMENT TANK
+            buildGlassTank();
+
+            // 8. RENDER TARGET SYSTEM (Screen Space Fluid)
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            
+            backgroundRenderTarget = new THREE.WebGLRenderTarget(w, h, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat
+            });
+
+            fluidRenderTarget = new THREE.WebGLRenderTarget(w, h, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat
+            });
+
+            // 9. FLUID PARTICLES MESH (Rendered inside fluidScene in Screen Space Fluid mode)
+            const pointGeometry = new THREE.BufferGeometry();
+            const positionArray = new Float32Array(MAX_CAPACITY * 3);
+            pointGeometry.setAttribute('position', new THREE.BufferAttribute(positionArray, 3));
+
+            const particleMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uSize: { value: 65.0 },
+                    uParticleScale: { value: CONFIG.particleScale }
+                },
+                vertexShader: getParticleVertexShader(),
+                fragmentShader: getParticleFragmentShader(),
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            particlePoints = new THREE.Points(pointGeometry, particleMaterial);
+            fluidScene.add(particlePoints);
+
+            // 10. PHYSICAL 3D INSTANCED MESHES (Rendered in mainScene when 3D Particles mode is chosen)
+            const instancedGeo = new THREE.SphereGeometry(0.24, 6, 6);
+            const instancedMat = new THREE.MeshStandardMaterial({
+                roughness: 0.15,
+                metalness: 0.8,
+                color: 0xffffff
+            });
+            particleMesh = new THREE.InstancedMesh(instancedGeo, instancedMat, MAX_CAPACITY);
+            particleMesh.castShadow = true;
+            particleMesh.receiveShadow = true;
+            particleMesh.visible = false; // Hidden by default (fluid mode active)
+            mainScene.add(particleMesh);
+
+            // 11. FLOOR REACTIONS - VISUAL WATER SPLASH SYSTEM
+            for (let i = 0; i < MAX_SPLASH; i++) {
+                const idx = i * 3;
+                splashPos[idx] = 99999.0;
+                splashPos[idx+1] = 99999.0;
+                splashPos[idx+2] = 99999.0;
+                splashLife[i] = 0.0;
+            }
+            const splashGeo = new THREE.BufferGeometry();
+            splashGeo.setAttribute('position', new THREE.BufferAttribute(splashPos, 3));
+            const splashMat = new THREE.PointsMaterial({
+                color: 0x22d3ee,
+                size: 0.15,
+                transparent: true,
+                opacity: 0.75,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            splashPoints = new THREE.Points(splashGeo, splashMat);
+            mainScene.add(splashPoints);
+
+            // 12. SCREEN-SPACE METABALL COMPOSITING PLANE
+            const compositeMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    tBackground: { value: null },
+                    tFluid: { value: null },
+                    uResolution: { value: new THREE.Vector2(w, h) },
+                    uBaseColor: { value: CONFIG.baseColor },
+                    uDeepColor: { value: CONFIG.deepColor },
+                    uRefractionStrength: { value: CONFIG.refractionStrength },
+                    uFresnelStrength: { value: CONFIG.fresnelStrength },
+                    uSpecularPower: { value: CONFIG.specularPower },
+                    uThreshold: { value: CONFIG.threshold },
+                    uMetalness: { value: CONFIG.metalness }
+                },
+                vertexShader: getCompositeVertexShader(),
+                fragmentShader: getCompositeFragmentShader()
+            });
+
+            const quadGeo = new THREE.PlaneGeometry(2, 2);
+            compositeQuad = new THREE.Mesh(quadGeo, compositeMaterial);
+
+            // Invisible interaction target matching the container's front center face
+            const planeGeo = new THREE.PlaneGeometry(100, 100);
+            interactionMeshPlane = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ visible: false }));
+            mainScene.add(interactionMeshPlane);
+
+            updateUIParticleCount();
+        }
+
+        // Beautiful glass-walled containing tank and border framework
+        function buildGlassTank() {
+            const containerGroup = new THREE.Group();
+
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.18,
+                roughness: 0.08,
+                metalness: 0.1,
+                transmission: 0.9,
+                ior: 1.5,
+                thickness: 0.5,
+                depthWrite: true,
+                side: THREE.DoubleSide
+            });
+
+            const frameMat = new THREE.MeshStandardMaterial({
+                color: 0x0a0c10,
+                roughness: 0.2,
+                metalness: 0.85
+            });
+
+            const boxWidth = BOUNDS.maxX - BOUNDS.minX;
+            const boxHeight = BOUNDS.maxY - BOUNDS.minY;
+            const boxDepth = BOUNDS.maxZ - BOUNDS.minZ;
+
+            // Glass panels
+            const panels = [
+                { w: boxWidth, h: boxHeight, pos: [0, 0, -boxDepth/2] }, // Back wall
+                { w: boxWidth, h: boxHeight, pos: [0, 0, boxDepth/2] },  // Front wall
+                { w: boxDepth, h: boxHeight, pos: [-boxWidth/2, 0, 0], rot: [0, Math.PI/2, 0] }, // Left wall
+                { w: boxDepth, h: boxHeight, pos: [boxWidth/2, 0, 0], rot: [0, Math.PI/2, 0] },  // Right wall
+                { w: boxWidth, h: boxDepth, pos: [0, -boxHeight/2, 0], rot: [Math.PI/2, 0, 0] }   // Floor
+            ];
+
+            panels.forEach(p => {
+                const paneGeo = new THREE.PlaneGeometry(p.w, p.h);
+                const paneMesh = new THREE.Mesh(paneGeo, glassMat);
+                paneMesh.position.set(...p.pos);
+                if (p.rot) paneMesh.rotation.set(...p.rot);
+                containerGroup.add(paneMesh);
+            });
+
+            // Frame Borders (Visual Structure realism)
+            const frameThickness = 0.45;
+            const borderGeometry = new THREE.BoxGeometry(boxWidth + frameThickness, frameThickness, frameThickness);
+            
+            // Build simple cage
+            const topFront = new THREE.Mesh(borderGeometry, frameMat);
+            topFront.position.set(0, boxHeight/2, boxDepth/2);
+            containerGroup.add(topFront);
+
+            const topBack = topFront.clone();
+            topBack.position.set(0, boxHeight/2, -boxDepth/2);
+            containerGroup.add(topBack);
+
+            const bottomFront = topFront.clone();
+            bottomFront.position.set(0, -boxHeight/2, boxDepth/2);
+            containerGroup.add(bottomFront);
+
+            const bottomBack = topFront.clone();
+            bottomBack.position.set(0, -boxHeight/2, -boxDepth/2);
+            containerGroup.add(bottomBack);
+
+            // Vertical metal columns
+            const colGeo = new THREE.BoxGeometry(frameThickness, boxHeight + frameThickness, frameThickness);
+            const positions = [
+                [-boxWidth/2, 0, -boxDepth/2],
+                [boxWidth/2, 0, -boxDepth/2],
+                [-boxWidth/2, 0, boxDepth/2],
+                [boxWidth/2, 0, boxDepth/2]
+            ];
+
+            positions.forEach(pos => {
+                const col = new THREE.Mesh(colGeo, frameMat);
+                col.position.set(...pos);
+                containerGroup.add(col);
+            });
+
+            mainScene.add(containerGroup);
+            glassContainer = containerGroup;
+        }
+
+        // Fills room background with high-contrast calibration assets so refraction pops
+        function buildCalibrationBackground() {
+            // High-Tech Neon Grid Floor
+            const size = 50;
+            const divisions = 25;
+            innerGridFloor = new THREE.GridHelper(size, divisions, 0x06b6d4, 0x1e293b);
+            innerGridFloor.position.y = -8.1;
+            mainScene.add(innerGridFloor);
+
+            // Background floating test meshes (Toruses, colored spheres)
+            const shapesGroup = new THREE.Group();
+
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.1, metalness: 0.8 }); // Pink Shiny
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.2 }); // Gold Specular
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.05, metalness: 0.9 }); // Blue Chrome
+
+            const shapes = [
+                { geo: new THREE.TorusGeometry(3, 0.8, 12, 48), mat: mat1, pos: [-12, 3, -15], rot: [0.5, 0.5, 0] },
+                { geo: new THREE.SphereGeometry(2.5, 32, 32), mat: mat2, pos: [12, -2, -18] },
+                { geo: new THREE.BoxGeometry(5, 5, 5), mat: mat3, pos: [0, 8, -25], rot: [0.8, 0.2, 0.4] }
+            ];
+
+            shapes.forEach(sh => {
+                const mesh = new THREE.Mesh(sh.geo, sh.mat);
+                mesh.position.set(...sh.pos);
+                if (sh.rot) mesh.rotation.set(...sh.rot);
+                shapesGroup.add(mesh);
+                calibrationShapes.push(mesh);
+            });
+
+            mainScene.add(shapesGroup);
+        }
+
+        function initSimulationState() {
+            // Pour particles inside a concentrated high region to waterfall down
+            const spawnRange = {
+                minX: -5.0, maxX: 5.0,
+                minY: 1.0, maxY: 7.5,
+                minZ: -5.0, maxZ: 5.0
+            };
+
+            for (let i = 0; i < MAX_CAPACITY; i++) {
+                const idx = i * 3;
+                if (i < particleCount) {
+                    pos[idx] = spawnRange.minX + Math.random() * (spawnRange.maxX - spawnRange.minX);
+                    pos[idx+1] = spawnRange.minY + Math.random() * (spawnRange.maxY - spawnRange.minY);
+                    pos[idx+2] = spawnRange.minZ + Math.random() * (spawnRange.maxZ - spawnRange.minZ);
+                    
+                    vel[idx] = (Math.random() - 0.5) * 1.0;
+                    vel[idx+1] = (Math.random() - 0.5) * 1.0;
+                    vel[idx+2] = (Math.random() - 0.5) * 1.0;
+                } else {
+                    pos[idx] = 99999.0;
+                    pos[idx+1] = 99999.0;
+                    pos[idx+2] = 99999.0;
+                    
+                    vel[idx] = 0;
+                    vel[idx+1] = 0;
+                    vel[idx+2] = 0;
+                }
+                forces[idx] = 0;
+                forces[idx+1] = 0;
+                forces[idx+2] = 0;
+                density[i] = 1.0;
+                pressure[i] = 0.0;
+            }
+        }
+
+        // Trigger visual splash particles on floor impact
+        function triggerFloorSplash(x, z, speed) {
+            const numSplash = Math.min(Math.floor(speed * 0.6) + 1, 5);
+            const splashMatColor = splashPoints.material.color;
+            
+            // Sync splash color with the current active fluid style
+            if (CONFIG.palette === 'honey') splashMatColor.setHex(0xeab308);
+            else if (CONFIG.palette === 'slime') splashMatColor.setHex(0x10b981);
+            else if (CONFIG.palette === 'blood') splashMatColor.setHex(0xef4444);
+            else if (CONFIG.palette === 'mercury') splashMatColor.setHex(0xcbd5e1);
+            else splashMatColor.setHex(0x22d3ee);
+
+            for (let c = 0; c < numSplash; c++) {
+                const i = splashIndex;
+                const idx = i * 3;
+
+                splashPos[idx] = x + (Math.random() - 0.5) * 0.5;
+                splashPos[idx+1] = BOUNDS.minY + 0.1;
+                splashPos[idx+2] = z + (Math.random() - 0.5) * 0.5;
+
+                // Circular upward dome splash dispersion
+                const angle = Math.random() * Math.PI * 2;
+                const dispersionSpeed = 1.5 + Math.random() * speed * 0.35;
+                splashVel[idx] = Math.cos(angle) * dispersionSpeed * 0.6;
+                splashVel[idx+1] = (0.4 + Math.random() * 0.8) * dispersionSpeed;
+                splashVel[idx+2] = Math.sin(angle) * dispersionSpeed * 0.6;
+
+                splashLife[i] = 1.0; // Reset lifespan
+
+                splashIndex = (splashIndex + 1) % MAX_SPLASH;
+            }
+        }
+
+        // Live visual splash array update tick
+        function updateVisualSplashParticles(dt) {
+            const positions = splashPoints.geometry.getAttribute('position');
+            for (let i = 0; i < MAX_SPLASH; i++) {
+                const idx = i * 3;
+                if (splashLife[i] > 0.0) {
+                    splashLife[i] -= dt * 1.8; // Decay lifespan
+                    if (splashLife[i] < 0) splashLife[i] = 0.0;
+
+                    // Gravity simulation on visual splash spray
+                    splashVel[idx+1] += -12.0 * dt;
+
+                    splashPos[idx] += splashVel[idx] * dt;
+                    splashPos[idx+1] += splashVel[idx+1] * dt;
+                    splashPos[idx+2] += splashVel[idx+2] * dt;
+
+                    // Floor bounce
+                    if (splashPos[idx+1] < BOUNDS.minY) {
+                        splashPos[idx+1] = BOUNDS.minY;
+                        splashVel[idx+1] *= -0.25;
+                        splashVel[idx] *= 0.8;
+                        splashVel[idx+2] *= 0.8;
+                    }
+
+                    positions.array[idx] = splashPos[idx];
+                    positions.array[idx+1] = splashPos[idx+1];
+                    positions.array[idx+2] = splashPos[idx+2];
+                } else {
+                    positions.array[idx] = 99999.0;
+                    positions.array[idx+1] = 99999.0;
+                    positions.array[idx+2] = 99999.0;
+                }
+            }
+            positions.needsUpdate = true;
+        }
+
+        // Highly Stable Real-Time SPH Physics Engine
+        function solvePhysics(dt) {
+            dt = Math.min(dt, 0.015);
+
+            // Sub-stepping logic to enforce high accuracy
+            const subSteps = 2;
+            const subDt = dt / subSteps;
+
+            const H = CONFIG.smoothingLength;
+            const hSq = H * H;
+            const mass = CONFIG.particleMass;
+            const kStiffness = CONFIG.stiffness;
+            const rhoZero = CONFIG.restDensity;
+            const viscosity = CONFIG.viscosity;
+            const surfaceTension = CONFIG.surfaceTension; // Drop cohesion parameter
+
+            // SPH kernel multipliers
+            const POLY6 = 315.0 / (64.0 * Math.PI * Math.pow(H, 9));
+            const SPIKY_GRAD = -45.0 / (Math.PI * Math.pow(H, 6));
+            const VISC_LAP = 45.0 / (Math.PI * Math.pow(H, 6));
+
+            for (let sub = 0; sub < subSteps; sub++) {
+                // Step 1: Spatial Grid Refresh
+                SPATIAL_GRID.populate();
+
+                // Step 2: Calculate Density & Pressure
+                for (let i = 0; i < particleCount; i++) {
+                    const idx = i * 3;
+                    const px = pos[idx];
+                    const py = pos[idx+1];
+                    const pz = pos[idx+2];
+
+                    let dSum = 0.0;
+                    const neighbors = SPATIAL_GRID.getNearby(px, py, pz);
+
+                    for (let n = 0; n < neighbors.length; n++) {
+                        const j = neighbors[n];
+                        const jdx = j * 3;
+                        const rx = px - pos[jdx];
+                        const ry = py - pos[jdx+1];
+                        const rz = pz - pos[jdx+2];
+                        const distSq = rx*rx + ry*ry + rz*rz;
+
+                        if (distSq < hSq) {
+                            const term = hSq - distSq;
+                            dSum += mass * POLY6 * term * term * term;
+                        }
+                    }
+
+                    density[i] = Math.max(dSum, 0.05);
+                    // SPH Equation of State
+                    pressure[i] = kStiffness * (density[i] - rhoZero);
+                }
+
+                // Step 3: Compute Forces (Viscosity, Pressure, and Surface Cohesion)
+                for (let i = 0; i < particleCount; i++) {
+                    const idx = i * 3;
+                    const px = pos[idx];
+                    const py = pos[idx+1];
+                    const pz = pos[idx+2];
+                    const vx = vel[idx];
+                    const vy = vel[idx+1];
+                    const vz = vel[idx+2];
+
+                    let fx = 0.0;
+                    let fy = 0.0;
+                    let fz = 0.0;
+
+                    const neighbors = SPATIAL_GRID.getNearby(px, py, pz);
+
+                    for (let n = 0; n < neighbors.length; n++) {
+                        const j = neighbors[n];
+                        if (i === j) continue;
+
+                        const jdx = j * 3;
+                        const rx = px - pos[jdx];
+                        const ry = py - pos[jdx+1];
+                        const rz = pz - pos[jdx+2];
+                        const distSq = rx*rx + ry*ry + rz*rz;
+
+                        if (distSq < hSq) {
+                            const dist = Math.sqrt(distSq) + 1e-4;
+                            const h_r = H - dist;
+
+                            // Pressure gradient force (Spiky)
+                            const pForce = -mass * (pressure[i] + pressure[j]) / (2.0 * density[j]) * SPIKY_GRAD * h_r * h_r;
+                            fx += pForce * (rx / dist);
+                            fy += pForce * (ry / dist);
+                            fz += pForce * (rz / dist);
+
+                            // Viscosity Force (Laplacian approximation)
+                            const vForce = viscosity * mass * VISC_LAP * h_r / density[j];
+                            fx += vForce * (vel[jdx] - vx);
+                            fy += vForce * (vel[jdx+1] - vy);
+                            fz += vForce * (vel[jdx+2] - vz);
+
+                            // Surface Cohesion model (SPH Surface Tension)
+                            if (surfaceTension > 0.0) {
+                                const cohesion = surfaceTension * mass * mass * (h_r * h_r * h_r);
+                                fx += cohesion * (rx / dist);
+                                fy += cohesion * (ry / dist);
+                                fz += cohesion * (rz / dist);
+                            }
+                        }
+                    }
+
+                    forces[idx] = fx;
+                    forces[idx+1] = fy;
+                    forces[idx+2] = fz;
+                }
+
+                // Step 4: Integrator & Bounds collision mapping
+                const gX = CONFIG.gravity.x;
+                const gY = CONFIG.gravity.y;
+                const gZ = CONFIG.gravity.z;
+
+                for (let i = 0; i < particleCount; i++) {
+                    const idx = i * 3;
+
+                    // Compute Interactive Force field factors
+                    let interactFX = 0;
+                    let interactFY = 0;
+                    let interactFZ = 0;
+
+                    if (isMouseDown) {
+                        const dx = pos[idx] - mouse3D.x;
+                        const dy = pos[idx+1] - mouse3D.y;
+                        const dz = pos[idx+2] - mouse3D.z;
+                        const distSq = dx*dx + dy*dy + dz*dz + 0.1;
+                        const dist = Math.sqrt(distSq);
+
+                        if (dist < 9.0) {
+                            const power = Math.pow(1.0 - (dist / 9.0), 2.0) * 160.0;
+                            if (interactionMode === 'attract') {
+                                interactFX = -(dx / dist) * power;
+                                interactFY = -(dy / dist) * power;
+                                interactFZ = -(dz / dist) * power;
+                            } else if (interactionMode === 'repel') {
+                                interactFX = (dx / dist) * power * 1.5;
+                                interactFY = (dy / dist) * power * 1.5;
+                                interactFZ = (dz / dist) * power * 1.5;
+                            } else if (interactionMode === 'vortex') {
+                                interactFX = -dz * power * 0.35;
+                                interactFY = (Math.random() - 0.5) * power * 0.1;
+                                interactFZ = dx * power * 0.35;
+                            }
+                        }
+                    }
+
+                    // Acceleration Integration (Verlet-Euler)
+                    const ax = (forces[idx] / density[i]) + gX + interactFX;
+                    const ay = (forces[idx+1] / density[i]) + gY + interactFY;
+                    const az = (forces[idx+2] / density[i]) + gZ + interactFZ;
+
+                    vel[idx] += ax * subDt;
+                    vel[idx+1] += ay * subDt;
+                    vel[idx+2] += az * subDt;
+
+                    // Hard velocity ceiling governor
+                    const speedSq = vel[idx]*vel[idx] + vel[idx+1]*vel[idx+1] + vel[idx+2]*vel[idx+2];
+                    const maxVelocity = 30.0;
+                    if (speedSq > maxVelocity * maxVelocity) {
+                        const limit = maxVelocity / Math.sqrt(speedSq);
+                        vel[idx] *= limit;
+                        vel[idx+1] *= limit;
+                        vel[idx+2] *= limit;
+                    }
+
+                    // Update local positions
+                    pos[idx] += vel[idx] * subDt;
+                    pos[idx+1] += vel[idx+1] * subDt;
+                    pos[idx+2] += vel[idx+2] * subDt;
+
+                    // Solid Container wall bounces with absorption
+                    const elasticity = -0.35;
+
+                    // X walls
+                    if (pos[idx] < BOUNDS.minX) {
+                        pos[idx] = BOUNDS.minX;
+                        vel[idx] *= elasticity;
+                    } else if (pos[idx] > BOUNDS.maxX) {
+                        pos[idx] = BOUNDS.maxX;
+                        vel[idx] *= elasticity;
+                    }
+
+                    // Y floors / Ceilings
+                    if (pos[idx+1] < BOUNDS.minY) {
+                        const impactSpeed = -vel[idx+1];
+                        pos[idx+1] = BOUNDS.minY;
+                        vel[idx+1] *= elasticity;
+
+                        // Physical splash reaction: scatter on high speed collision
+                        if (impactSpeed > 2.5) {
+                            vel[idx] += (Math.random() - 0.5) * impactSpeed * 0.35;
+                            vel[idx+2] += (Math.random() - 0.5) * impactSpeed * 0.35;
+                            vel[idx+1] += Math.random() * impactSpeed * 0.15; // upward scatter
+                            
+                            // Trigger visual splash particles
+                            triggerFloorSplash(pos[idx], pos[idx+2], impactSpeed);
+                        }
+
+                        // Tangential ground friction sliding
+                        vel[idx] *= 0.82;
+                        vel[idx+2] *= 0.82;
+                    } else if (pos[idx+1] > BOUNDS.maxY) {
+                        pos[idx+1] = BOUNDS.maxY;
+                        vel[idx+1] *= elasticity;
+                    }
+
+                    // Z walls
+                    if (pos[idx+2] < BOUNDS.minZ) {
+                        pos[idx+2] = BOUNDS.minZ;
+                        vel[idx+2] *= elasticity;
+                    } else if (pos[idx+2] > BOUNDS.maxZ) {
+                        pos[idx+2] = BOUNDS.maxZ;
+                        vel[idx+2] *= elasticity;
+                    }
+                }
+            }
+        }
+
+        // Animated environmental meshes rotation for active refraction testing
+        function updateEnvironment(timestamp) {
+            calibrationShapes.forEach((mesh, index) => {
+                const speed = 0.0008 * (index + 1);
+                mesh.rotation.x += speed;
+                mesh.rotation.y += speed * 0.7;
+            });
+        }
+
+        // Live visual renderer updates (InstancedMesh for 3D Particles Mode)
+        const dummyMatrix = new THREE.Object3D();
+        const pColor = new THREE.Color();
+
+        function renderUpdate() {
+            if (CONFIG.renderMode === 'particles') {
+                const p = PALETTES[CONFIG.palette] || PALETTES['water'];
+                const scale = CONFIG.particleScale * 0.95;
+
+                for (let i = 0; i < MAX_CAPACITY; i++) {
+                    const idx = i * 3;
+                    if (i < particleCount) {
+                        dummyMatrix.position.set(pos[idx], pos[idx+1], pos[idx+2]);
+                        dummyMatrix.scale.set(scale, scale, scale);
+                        dummyMatrix.updateMatrix();
+                        particleMesh.setMatrixAt(i, dummyMatrix.matrix);
+
+                        // Velocity-based physical color interpolation
+                        const vx = vel[idx];
+                        const vy = vel[idx+1];
+                        const vz = vel[idx+2];
+                        const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
+                        const factor = Math.min(speed / 16.0, 1.0);
+                        
+                        pColor.copy(p.base).lerp(p.high, factor);
+                        particleMesh.setColorAt(i, pColor);
+                    } else {
+                        // Move unused instances out of boundary bounds
+                        dummyMatrix.position.set(99999, 99999, 99999);
+                        dummyMatrix.scale.set(0, 0, 0);
+                        dummyMatrix.updateMatrix();
+                        particleMesh.setMatrixAt(i, dummyMatrix.matrix);
+                    }
+                }
+                particleMesh.instanceMatrix.needsUpdate = true;
+                if (particleMesh.instanceColor) {
+                    particleMesh.instanceColor.needsUpdate = true;
+                }
+            }
+        }
+
+        // Main simulation frame loops
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            let dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            // Frame diagnostic tracker
+            frameCount++;
+            if (timestamp > lastFpsUpdate + 1000) {
+                const fps = Math.round((frameCount * 1000) / (timestamp - lastFpsUpdate));
+                document.getElementById('fps-counter').innerText = fps;
+                frameCount = 0;
+                lastFpsUpdate = timestamp;
+            }
+
+            // Sync dynamic interactions and physical meshes
+            updateEnvironment(timestamp);
+            updateMouseRaycast();
+
+            if (!isPaused || stepOnce) {
+                solvePhysics(dt);
+                updateVisualSplashParticles(dt);
+                stepOnce = false;
+            }
+
+            // Render updates
+            renderUpdate();
+
+            // Sync physics position arrays to SPH particle buffer geometry (for fluid view)
+            const posAttr = particlePoints.geometry.getAttribute('position');
+            for (let i = 0; i < MAX_CAPACITY; i++) {
+                const idx = i * 3;
+                if (i < particleCount) {
+                    posAttr.array[idx] = pos[idx];
+                    posAttr.array[idx+1] = pos[idx+1];
+                    posAttr.array[idx+2] = pos[idx+2];
+                } else {
+                    posAttr.array[idx] = 99999.0;
+                    posAttr.array[idx+1] = 99999.0;
+                    posAttr.array[idx+2] = 99999.0;
+                }
+            }
+            posAttr.needsUpdate = true;
+
+            // --- MULTI-PASS RENDER PIPELINE COMPOSITIONS ---
+            if (CONFIG.renderMode === 'particles') {
+                // Direct pass rendering of instanced 3D solid spheres inside the container glass tank
+                renderer.setRenderTarget(null);
+                renderer.render(mainScene, camera);
+            } else {
+                // Pass 1: Render background studio, grids and glass tank frame to target
+                renderer.setRenderTarget(backgroundRenderTarget);
+                renderer.render(mainScene, camera);
+
+                // Pass 2: Render overlapping soft particle points to additive density target
+                renderer.setRenderTarget(fluidRenderTarget);
+                renderer.render(fluidScene, camera);
+
+                // Pass 3: Composite everything with Screen-Space Surface normal reconstruction & absorption
+                renderer.setRenderTarget(null);
+                compositeQuad.material.uniforms.tBackground.value = backgroundRenderTarget.texture;
+                compositeQuad.material.uniforms.tFluid.value = fluidRenderTarget.texture;
+                renderer.render(compositeQuad, camera);
+            }
+
+            // Orbit cameras orientation updates
+            controls.update();
+        }
+
+        // Set the active Render Mode (Fluid Surface vs 3D Particles)
+        function setRenderMode(mode) {
+            CONFIG.renderMode = mode;
+            
+            const buttons = document.querySelectorAll('.render-btn');
+            buttons.forEach(btn => {
+                btn.className = "render-btn px-3 py-2.5 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2";
+            });
+
+            const active = document.getElementById(`btn-render-${mode}`);
+            if (active) {
+                active.className = "render-btn px-3 py-2.5 bg-cyan-950/50 text-cyan-300 border border-cyan-500/50 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2 glow-active";
+            }
+
+            // Manage visibility components
+            if (mode === 'particles') {
+                particlePoints.visible = false;
+                particleMesh.visible = true;
+                document.getElementById('current-render-mode').innerText = "3D SPH Particles";
+            } else {
+                particlePoints.visible = true;
+                particleMesh.visible = false;
+                document.getElementById('current-render-mode').innerText = "Screen-Space Liquid";
+            }
+        }
+
+        // Raycast logic to map mouse 2D inputs to 3D space of front box
+        function updateMouseRaycast() {
+            interactionMeshPlane.lookAt(camera.position);
+
+            if (isMouseDown) {
+                mouseRaycaster.setFromCamera(mouse2D, camera);
+                const intersects = mouseRaycaster.intersectObject(interactionMeshPlane);
+                if (intersects.length > 0) {
+                    mouse3D.copy(intersects[0].point);
+                }
+            }
+        }
+
+        // Preset Apply Mechanism
+        function applyPreset(name) {
+            const p = MATERIAL_PRESETS[name];
+            if (!p) return;
+
+            // Apply SPH dynamics parameters
+            CONFIG.viscosity = p.viscosity;
+            CONFIG.surfaceTension = p.tension;
+            CONFIG.stiffness = p.stiffness;
+            CONFIG.restDensity = p.restDensity;
+            CONFIG.particleScale = p.pScale;
+            CONFIG.refractionStrength = p.refraction;
+            CONFIG.fresnelStrength = p.fresnel;
+            CONFIG.threshold = p.threshold;
+            CONFIG.metalness = p.metalness;
+            CONFIG.baseColor.set(p.baseCol);
+            CONFIG.deepColor.set(p.deepCol);
+            CONFIG.specularPower = p.specPower;
+            CONFIG.palette = p.palette;
+
+            // Sync UI elements
+            document.getElementById('gravity-slider').value = CONFIG.gravity.y;
+            document.getElementById('viscosity-slider').value = CONFIG.viscosity;
+            document.getElementById('tension-slider').value = CONFIG.surfaceTension;
+            document.getElementById('stiffness-slider').value = CONFIG.stiffness;
+            document.getElementById('rest-density-slider').value = CONFIG.restDensity;
+            
+            document.getElementById('refraction-slider').value = CONFIG.refractionStrength;
+            document.getElementById('fresnel-slider').value = CONFIG.fresnelStrength;
+            document.getElementById('threshold-slider').value = CONFIG.threshold;
+            document.getElementById('p-scale-slider').value = CONFIG.particleScale;
+
+            updateReadouts();
+
+            // Notify custom shaders
+            particlePoints.material.uniforms.uParticleScale.value = CONFIG.particleScale;
+            
+            const uni = compositeQuad.material.uniforms;
+            uni.uBaseColor.value.copy(CONFIG.baseColor);
+            uni.uDeepColor.value.copy(CONFIG.deepColor);
+            uni.uRefractionStrength.value = CONFIG.refractionStrength;
+            uni.uFresnelStrength.value = CONFIG.fresnelStrength;
+            uni.uThreshold.value = CONFIG.threshold;
+            uni.uMetalness.value = CONFIG.metalness;
+            uni.uSpecularPower.value = CONFIG.specularPower;
+        }
+
+        function updateReadouts() {
+            document.getElementById('gravity-val').innerText = CONFIG.gravity.y.toFixed(1);
+            document.getElementById('viscosity-val').innerText = CONFIG.viscosity.toFixed(2);
+            document.getElementById('tension-val').innerText = CONFIG.surfaceTension.toFixed(2);
+            document.getElementById('stiffness-val').innerText = CONFIG.stiffness.toFixed(1);
+            document.getElementById('rest-density-val').innerText = CONFIG.restDensity.toFixed(1);
+            
+            document.getElementById('refraction-val').innerText = CONFIG.refractionStrength.toFixed(3);
+            document.getElementById('fresnel-val').innerText = CONFIG.fresnelStrength.toFixed(2);
+            document.getElementById('threshold-val').innerText = CONFIG.threshold.toFixed(2);
+            document.getElementById('p-scale-val').innerText = CONFIG.particleScale.toFixed(2);
+        }
+
+        // Custom Bomb detonation effect
+        function triggerExplosion() {
+            const explosionCenter = new THREE.Vector3(0, -5.0, 0);
+            for (let i = 0; i < particleCount; i++) {
+                const idx = i * 3;
+                const dx = pos[idx] - explosionCenter.x;
+                const dy = pos[idx+1] - explosionCenter.y;
+                const dz = pos[idx+2] - explosionCenter.z;
+                const distSq = dx*dx + dy*dy + dz*dz + 0.1;
+                const dist = Math.sqrt(distSq);
+
+                if (dist < 10.0) {
+                    const power = (1.0 - (dist / 10.0)) * 55.0;
+                    vel[idx] += (dx / dist) * power;
+                    vel[idx+1] += (dy / dist) * power + 8.0; // Vertical displacement splash scatter
+                    vel[idx+2] += (dz / dist) * power;
+                    
+                    // Trigger dynamic floor splash visual
+                    if (pos[idx+1] < BOUNDS.minY + 2.0) {
+                        triggerFloorSplash(pos[idx], pos[idx+2], power * 0.5);
+                    }
+                }
+            }
+        }
+
+        // Custom Shader Codes for High-Realism Screen Space Fluid Reconstructions
+        function getParticleVertexShader() {
+            return `
+                uniform float uSize;
+                uniform float uParticleScale;
+                void main() {
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * mvPosition;
+                    // Attenuate point size beautifully based on view distance
+                    gl_PointSize = uSize * uParticleScale * (250.0 / -mvPosition.z);
+                }
+            `;
+        }
+
+        function getParticleFragmentShader() {
+            return `
+                void main() {
+                    vec2 coord = gl_PointCoord * 2.0 - 1.0;
+                    float r2 = dot(coord, coord);
+                    if (r2 > 1.0) discard;
+                    
+                    // High-density peak smooth step falling off organically
+                    float density = 1.0 - r2;
+                    density = density * density * density; // Cubic density falloff profile
+                    
+                    gl_FragColor = vec4(density, density, density, density);
+                }
+            `;
+        }
+
+        function getCompositeVertexShader() {
+            return `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = vec4(position, 1.0);
+                }
+            `;
+        }
+
+        function getCompositeFragmentShader() {
+            return `
+                uniform sampler2D tBackground;
+                uniform sampler2D tFluid;
+                uniform vec2 uResolution;
+                uniform vec3 uBaseColor;
+                uniform vec3 uDeepColor;
+                uniform float uRefractionStrength;
+                uniform float uFresnelStrength;
+                uniform float uSpecularPower;
+                uniform float uThreshold;
+                uniform float uMetalness;
+                
+                varying vec2 vUv;
+
+                void main() {
+                    // Sample additive fluid thickness / density
+                    float density = texture2D(tFluid, vUv).r;
+
+                    // If background, bypass liquid composition pass entirely
+                    if (density < uThreshold) {
+                        gl_FragColor = texture2D(tBackground, vUv);
+                        return;
+                    }
+
+                    // 1. Surface Reconstruction (Density derivative gradient vectors)
+                    float stepX = 1.0 / uResolution.x;
+                    float stepY = 1.0 / uResolution.y;
+
+                    float dL = texture2D(tFluid, vUv + vec2(-stepX, 0.0)).r;
+                    float dR = texture2D(tFluid, vUv + vec2(stepX, 0.0)).r;
+                    float dT = texture2D(tFluid, vUv + vec2(0.0, stepY)).r;
+                    float dB = texture2D(tFluid, vUv + vec2(0.0, -stepY)).r;
+
+                    // Reconstruct a perfectly smooth normal from surrounding thickness values
+                    vec3 normal = vec3((dL - dR) * 2.2, (dB - dT) * 2.2, 0.1);
+                    normal = normalize(normal);
+
+                    // View vector
+                    vec3 viewDir = vec3(0.0, 0.0, 1.0);
+
+                    // Light vectors (Virtual Studio Spotlights)
+                    vec3 lightDir1 = normalize(vec3(0.5, 0.9, 1.0));
+                    vec3 lightDir2 = normalize(vec3(-0.6, -0.4, 0.4));
+
+                    // 2. Realistic Dynamic Refraction (Offset background mapping)
+                    vec2 refractedUv = vUv + normal.xy * uRefractionStrength * clamp(density, 0.0, 1.0);
+                    refractedUv = clamp(refractedUv, vec2(0.001), vec2(0.999)); // Boundary wrap prevention
+                    vec3 bgPixelColor = texture2D(tBackground, refractedUv).rgb;
+
+                    // 3. Beer's Law Absorption (Thick liquid volume saturation)
+                    vec3 absorptionCol = mix(uBaseColor, uDeepColor, smoothstep(uThreshold, 1.8, density));
+
+                    // 4. Fresnel Reflection effect
+                    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0) * uFresnelStrength;
+
+                    // 5. Specular Highlights (Blinn-Phong model)
+                    vec3 halfDir1 = normalize(lightDir1 + viewDir);
+                    float spec1 = pow(max(dot(normal, halfDir1), 0.0), uSpecularPower) * 1.5;
+
+                    vec3 halfDir2 = normalize(lightDir2 + viewDir);
+                    float spec2 = pow(max(dot(normal, halfDir2), 0.0), uSpecularPower * 0.5) * 0.4;
+
+                    // Fake Environmental Studio Horizon Reflectance Map
+                    vec3 reflectDir = reflect(-viewDir, normal);
+                    vec3 envReflection = vec3(0.06, 0.12, 0.22); // Sky tint ambient
+                    envReflection += vec3(1.0, 0.95, 0.9) * smoothstep(0.7, 1.0, dot(reflectDir, normalize(vec3(0.3, 0.8, -0.5))));
+                    envReflection += vec3(0.4, 0.6, 1.0) * smoothstep(0.2, 0.8, reflectDir.y);
+
+                    // 6. Realistic composition based on preset physical metalness (translucent vs metallic)
+                    vec3 compositionColor;
+                    if (uMetalness > 0.5) {
+                        // Opaque Metallic look (Liquid Mercury)
+                        compositionColor = mix(envReflection * uBaseColor, envReflection, fresnel) + vec3(spec1 + spec2);
+                    } else {
+                        // Translucent liquid water / honey with absorption
+                        vec3 waterBodyColor = bgPixelColor * absorptionCol;
+                        compositionColor = mix(waterBodyColor, envReflection, fresnel) + vec3(spec1 + spec2);
+                    }
+
+                    gl_FragColor = vec4(compositionColor, 1.0);
+                }
+            `;
+        }
+
+        function setupEventListeners() {
+            // Slider binding loop
+            const bindings = [
+                { id: 'gravity-slider', config: CONFIG.gravity, key: 'y' },
+                { id: 'viscosity-slider', config: CONFIG, key: 'viscosity' },
+                { id: 'tension-slider', config: CONFIG, key: 'surfaceTension' },
+                { id: 'stiffness-slider', config: CONFIG, key: 'stiffness' },
+                { id: 'rest-density-slider', config: CONFIG, key: 'restDensity' },
+                { id: 'refraction-slider', config: CONFIG, key: 'refractionStrength' },
+                { id: 'fresnel-slider', config: CONFIG, key: 'fresnelStrength' },
+                { id: 'threshold-slider', config: CONFIG, key: 'threshold' },
+                { id: 'p-scale-slider', config: CONFIG, key: 'particleScale' }
+            ];
+
+            bindings.forEach(bind => {
+                document.getElementById(bind.id).addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    if (bind.id === 'gravity-slider') {
+                        bind.config[bind.key] = val;
+                    } else {
+                        bind.config[bind.key] = val;
+                    }
+
+                    // Dynamically pass slider adjustments directly to shader uniform pointers
+                    particlePoints.material.uniforms.uParticleScale.value = CONFIG.particleScale;
+                    compositeQuad.material.uniforms.uRefractionStrength.value = CONFIG.refractionStrength;
+                    compositeQuad.material.uniforms.uFresnelStrength.value = CONFIG.fresnelStrength;
+                    compositeQuad.material.uniforms.uThreshold.value = CONFIG.threshold;
+
+                    updateReadouts();
+                });
+            });
+
+            // Layout Collapse Controls
+            const panel = document.getElementById('control-panel');
+            const toggleBtn = document.getElementById('toggle-panel-btn');
+            const expandBtn = document.getElementById('expand-panel-btn');
+
+            toggleBtn.addEventListener('click', () => {
+                panel.classList.add('scale-95', 'opacity-0', 'pointer-events-none');
+                setTimeout(() => {
+                    panel.classList.add('hidden');
+                    expandBtn.classList.remove('hidden');
+                    expandBtn.classList.add('flex');
+                }, 200);
+            });
+
+            expandBtn.addEventListener('click', () => {
+                expandBtn.classList.add('hidden');
+                expandBtn.classList.remove('flex');
+                panel.classList.remove('hidden');
+                setTimeout(() => {
+                    panel.classList.remove('scale-95', 'opacity-0', 'pointer-events-none');
+                }, 50);
+            });
+
+            // Direct Interaction binds on Viewport canvas container
+            const container = document.getElementById('canvas-container');
+
+            container.addEventListener('mousedown', (e) => {
+                if (interactionMode !== 'none') {
+                    if (e.button === 0) {
+                        isMouseDown = true;
+                    }
+                }
+                updateCoords2D(e);
+            });
+
+            window.addEventListener('mousemove', updateCoords2D);
+            window.addEventListener('mouseup', () => { isMouseDown = false; });
+
+            // Touch screen interface
+            container.addEventListener('touchstart', (e) => {
+                if (interactionMode !== 'none' && e.touches.length === 1) {
+                    isMouseDown = true;
+                    updateTouchCoords2D(e.touches[0]);
+                }
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (isMouseDown && e.touches.length === 1) {
+                    updateTouchCoords2D(e.touches[0]);
+                }
+            });
+
+            window.addEventListener('touchend', () => { isMouseDown = false; });
+
+            window.addEventListener('resize', onWindowResize);
+
+            // Default startup preset setup
+            applyPreset('water');
+        }
+
+        function updateCoords2D(e) {
+            mouse2D.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse2D.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function updateTouchCoords2D(t) {
+            mouse2D.x = (t.clientX / window.innerWidth) * 2 - 1;
+            mouse2D.y = -(t.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function onWindowResize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(w, h);
+
+            backgroundRenderTarget.setSize(w, h);
+            fluidRenderTarget.setSize(w, h);
+
+            compositeQuad.material.uniforms.uResolution.value.set(w, h);
+        }
+
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            const buttons = document.querySelectorAll('.mode-btn');
+            buttons.forEach(btn => {
+                btn.className = "mode-btn px-3 py-2 bg-slate-900/60 text-gray-300 border border-white/5 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2";
+            });
+
+            const active = document.getElementById(`btn-${mode}`);
+            if (active) {
+                active.className = "mode-btn px-3 py-2 bg-cyan-950/50 text-cyan-300 border border-cyan-500/50 rounded-xl text-xs transition duration-150 flex items-center justify-center gap-2 glow-active";
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const icon = document.getElementById('play-pause-icon');
+            if (isPaused) {
+                icon.className = "fa-solid fa-play text-sm ml-0.5";
+            } else {
+                icon.className = "fa-solid fa-pause text-sm";
+            }
+        }
+
+        function stepSimulation() {
+            isPaused = true;
+            stepOnce = true;
+            document.getElementById('play-pause-icon').className = "fa-solid fa-play text-sm ml-0.5";
+        }
+
+        function setGravityOrientation(dir) {
+            const slider = document.getElementById('gravity-slider');
+            if (dir === 'down') {
+                CONFIG.gravity.set(0, -9.81, 0);
+                slider.value = -9.81;
+            } else if (dir === 'zero') {
+                CONFIG.gravity.set(0, 0, 0);
+                slider.value = 0;
+            }
+            updateReadouts();
+        }
+
+        function resetSimulation() {
+            initSimulationState();
+            for (let i = 0; i < MAX_SPLASH; i++) {
+                splashLife[i] = 0.0;
+            }
+        }
+
+        function updateUIParticleCount() {
+            document.getElementById('particle-counter').innerText = `${particleCount.toLocaleString()} Particles`;
+        }
+
+        function addParticlesBatch() {
+            const batch = 400;
+            if (particleCount + batch <= MAX_CAPACITY) {
+                const old = particleCount;
+                particleCount += batch;
+
+                for (let i = old; i < particleCount; i++) {
+                    const idx = i * 3;
+                    pos[idx] = -3 + Math.random() * 6;
+                    pos[idx+1] = 3 + Math.random() * 4;
+                    pos[idx+2] = -3 + Math.random() * 6;
+
+                    vel[idx] = (Math.random() - 0.5) * 1.5;
+                    vel[idx+1] = -2.0;
+                    vel[idx+2] = (Math.random() - 0.5) * 1.5;
+                }
+                updateUIParticleCount();
+            } else {
+                const counter = document.getElementById('particle-counter');
+                counter.classList.add('text-rose-500', 'scale-105');
+                setTimeout(() => { counter.classList.remove('text-rose-500', 'scale-105'); }, 500);
+            }
+        }
+    </script>
+</body>
+</html>
